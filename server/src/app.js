@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const { rateLimit } = require('express-rate-limit');
 
 const authRoutes = require('./routes/auth');
 const coursesRoutes = require('./routes/courses');
@@ -11,12 +12,41 @@ const statsRoutes = require('./routes/stats');
 
 const app = express();
 
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:4173')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Слишком много запросов. Попробуйте позже.' },
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 25,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Слишком много попыток входа. Попробуйте позже.' },
+});
+
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || '*',
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error('Origin запрещён политикой CORS'));
+    },
   }),
 );
 app.use(express.json());
+app.use('/api', apiLimiter);
+app.use('/api/auth', authLimiter);
 
 app.get('/api/health', (req, res) => res.json({ ok: true, message: 'LearNity API работает' }));
 

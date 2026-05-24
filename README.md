@@ -47,7 +47,7 @@ Frontend по умолчанию стартует на `http://localhost:5173`.
 - `PORT`
 - `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
 - `JWT_SECRET`, `JWT_EXPIRES_IN`
-- `CORS_ORIGIN`
+- `CORS_ORIGIN` (можно указать несколько origin через запятую)
 
 ### client/.env.example
 
