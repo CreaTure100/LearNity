@@ -1,30 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { StylePicker } from './StylePicker';
 
-export function CourseEditorModal({ course, onSave, onClose }) {
-  const [form, setForm] = useState({
-    title: '',
-    description: '',
-    level: '',
-    cover_image_url: '',
-    is_published: true,
-    ui_variant: 'peach',
-    ui_title: '',
-  });
+function getInitialForm(course) {
+  return {
+    title: course?.title || '',
+    description: course?.description || '',
+    level: course?.level || '',
+    cover_image_url: course?.cover_image_url || '',
+    is_published: course?.is_published !== false,
+    ui_variant: course?.ui_variant || 'peach',
+    ui_title: course?.ui_title || '',
+  };
+}
 
-  useEffect(() => {
-    if (course) {
-      setForm({
-        title: course.title || '',
-        description: course.description || '',
-        level: course.level || '',
-        cover_image_url: course.cover_image_url || '',
-        is_published: course.is_published !== false,
-        ui_variant: course.ui_variant || 'peach',
-        ui_title: course.ui_title || '',
-      });
-    }
-  }, [course]);
+export function CourseEditorModal({ course, onSave, onClose }) {
+  const [form, setForm] = useState(() => getInitialForm(course));
 
   const set = (field) => (e) => {
     const val = e.target.type === 'checkbox' ? e.target.checked : e.target.value;

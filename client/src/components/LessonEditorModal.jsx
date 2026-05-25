@@ -1,30 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { StylePicker } from './StylePicker';
 
-export function LessonEditorModal({ lesson, onSave, onClose }) {
-  const [form, setForm] = useState({
-    title: '',
-    description: '',
-    video_url: '',
-    content: '',
-    order_index: '',
-    ui_variant: 'sky',
-    ui_title: '',
-  });
+function getInitialForm(lesson) {
+  return {
+    title: lesson?.title || '',
+    description: lesson?.description || '',
+    video_url: lesson?.video_url || '',
+    content: lesson?.content || '',
+    order_index: lesson?.order_index || '',
+    ui_variant: lesson?.ui_variant || 'sky',
+    ui_title: lesson?.ui_title || '',
+  };
+}
 
-  useEffect(() => {
-    if (lesson) {
-      setForm({
-        title: lesson.title || '',
-        description: lesson.description || '',
-        video_url: lesson.video_url || '',
-        content: lesson.content || '',
-        order_index: lesson.order_index || '',
-        ui_variant: lesson.ui_variant || 'sky',
-        ui_title: lesson.ui_title || '',
-      });
-    }
-  }, [lesson]);
+export function LessonEditorModal({ lesson, onSave, onClose }) {
+  const [form, setForm] = useState(() => getInitialForm(lesson));
 
   const set = (field) => (e) => setForm((s) => ({ ...s, [field]: e.target.value }));
 
