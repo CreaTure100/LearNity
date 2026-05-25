@@ -8,7 +8,8 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "migrate": "node src/scripts/migrate.js",
-    "test": "echo \"Тесты не настроены\""
+    "test": "echo \"Тесты не настроены\"",
+    "seed:courses": "node src/scripts/seedCourses.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

@@ -143,3 +143,219 @@ select {
     grid-template-columns: 1fr;
   }
 }
+
+/* Сетка карточек курсов как на макете */
+.course-grid{
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  max-width: 620px;
+}
+
+.course-item{}
+
+/* Карточка */
+.course-tile{
+  position: relative;
+  display: block;
+  border-radius: 18px;
+  padding: 32px 26px;
+  min-height: 230px;
+  overflow: hidden;
+  text-decoration: none;
+
+  background: var(--paper, #f7cbb8);
+
+  box-shadow:
+    0 24px 60px rgba(0,0,0,0.14),
+    0 2px 0 rgba(255,255,255,0.55) inset;
+}
+
+/* Подлист (фиолетовый/жёлтый/голубой) — выглядывает снизу справа */
+.course-tile::before{
+  content:"";
+  position:absolute;
+  left: 22px;
+  right: -26px;
+  bottom: -22px;
+  height: 36%;
+  border-radius: 18px;
+  background: var(--under, #bdb7ff);
+  z-index: 0;
+  box-shadow: 0 18px 40px rgba(0,0,0,0.10);
+}
+
+/* Волна перелистывания (мягкая дуга) */
+.course-tile::after{
+  content:"";
+  position:absolute;
+  left: -18%;
+  right: -18%;
+  bottom: -42%;
+  height: 86%;
+  z-index: 1;
+
+  /* тень + легкая подсветка как у бумаги */
+  background:
+    radial-gradient(120% 90% at 28% 25%, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%),
+    linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,0.10));
+
+  opacity: 0.35;
+
+  /* делаем дугу */
+  clip-path: ellipse(72% 55% at 50% 35%);
+}
+
+/* Контент поверх слоёв */
+.course-tile__title,
+.course-tile__clip{
+  position: relative;
+  z-index: 2;
+}
+
+/* скрепка справа сверху */
+.course-tile__clip{
+  position: absolute;
+  right: 20px;
+  top: 14px;
+  width: 56px;
+  height: 92px;
+  transform: rotate(10deg);
+  opacity: 0.9;
+
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='92' viewBox='0 0 56 92'%3E%3Cg fill='none' stroke='%23666666' stroke-width='3.0' stroke-linecap='round'%3E%3Cpath d='M35 14c0-7-6-13-13-13S9 7 9 14v50c0 11 9 20 20 20s20-9 20-20V24c0-7-6-13-13-13s-13 6-13 13v40c0 4.8 3.9 8.7 8.7 8.7S40 68.8 40 64V28'/%3E%3C/g%3E%3C/svg%3E");
+
+  filter: drop-shadow(0 10px 10px rgba(0,0,0,0.16));
+}
+
+/* Большой текст */
+.course-tile__title{
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  font-size: 46px;
+  line-height: 0.95;
+  text-transform: uppercase;
+  white-space: pre-line;
+  color: rgba(255,255,255,0.86);
+  text-shadow: 0 14px 30px rgba(0,0,0,0.10);
+}
+
+.course-admin{
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* A1: персиковый + фиолетовый */
+.tile--peach{
+  --paper: #f6c9b6;  /* персик как в оригинале */
+  --under: #b9b2ff;  /* фиолетовый подлист */
+}
+
+/* A2: сиреневый + жёлтый */
+.tile--lavender{
+  --paper: #cbc4ef;
+  --under: #f0db88;
+}
+
+/* B1: жёлтый + голубой */
+.tile--sand{
+  --paper: #f6dd95;
+  --under: #43b5e8;
+}
+
+/* прочие */
+.tile--purple{ --paper: #c98ae0; --under: #ff8fb0; }
+.tile--pink{ --paper: #ff8db5; --under: #43b5e8; }
+.tile--green{ --paper: #62c16f; --under: #0ea0ff; }
+
+.module-grid{
+  display:flex;
+  flex-direction:column;
+  gap: 26px;
+  max-width: 980px;
+}
+
+.module-tile{
+  position: relative;
+  display:block;
+  border-radius: 14px;
+  padding: 44px 34px 38px;
+  min-height: 140px;
+  overflow:hidden;
+  text-decoration:none;
+  background: var(--paper, #cbc4ef);
+  box-shadow: 0 24px 60px rgba(0,0,0,0.14);
+}
+
+/* подлист снизу справа */
+.module-tile::before{
+  content:"";
+  position:absolute;
+  left: 22px;
+  right: -26px;
+  bottom: -22px;
+  height: 34%;
+  border-radius: 14px;
+  background: var(--under, #f0db88);
+  z-index: 0;
+  box-shadow: 0 18px 40px rgba(0,0,0,0.10);
+}
+
+/* волна перелистывания */
+.module-tile::after{
+  content:"";
+  position:absolute;
+  left: -18%;
+  right: -18%;
+  bottom: -46%;
+  height: 92%;
+  z-index: 1;
+  background:
+    radial-gradient(120% 90% at 28% 25%, rgba(255,255,255,0.28), rgba(255,255,255,0) 55%),
+    linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,0.12));
+  opacity: 0.35;
+  clip-path: ellipse(72% 55% at 50% 35%);
+}
+
+.module-tile__title{
+  position: relative;
+  z-index: 2;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  font-size: 56px;
+  line-height: 0.95;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.86);
+  text-shadow: 0 14px 30px rgba(0,0,0,0.10);
+}
+
+/* пин слева сверху */
+.module-tile__pin{
+  position:absolute;
+  left: 28px;
+  top: 22px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  z-index: 3;
+  background: var(--pin, #6b4dbb);
+  box-shadow: 0 18px 18px rgba(0,0,0,0.22);
+}
+.module-tile__pin::after{
+  content:"";
+  position:absolute;
+  left: 6px;
+  top: 6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.35);
+}
+.module--blue{ --paper:#86c9d6; --under:#b9d06a; --pin:#2f4f9b; }
+.module--green{ --paper:#c6dc8a; --under:#f6c9b6; --pin:#0a6b5f; }
+.module--lavender{ --paper:#cbc4ef; --under:#f0db88; --pin:#5d3faa; }
+.module--sand{ --paper:#f6dd95; --under:#ff9dbf; --pin:#d39a56; }
+.module--pink{ --paper:#f5b3c6; --under:#cfc6f1; --pin:#9a2d22; }

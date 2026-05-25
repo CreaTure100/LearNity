@@ -64,17 +64,34 @@ export function CoursesPage() {
         </form>
       )}
 
-      <div className="list">
-        {courses.map((course) => (
-          <article key={course.id} className="card">
-            <h3>{course.title}</h3>
-            <p>{course.description || 'Без описания'}</p>
-            <div className="inline-actions">
-              <Link to={`/courses/${course.id}`}><button>Открыть</button></Link>
-              {canManage && <button className="danger" onClick={() => removeCourse(course.id)}>Удалить</button>}
-            </div>
-          </article>
-        ))}
+      <div className="course-grid">
+        {[...courses].reverse().map((course) => {
+          const uiTitle =
+            course.ui_title ||
+            (course.level ? `УРОВЕНЬ ${course.level}.\n${course.title}` : course.title);
+
+          const variant = course.ui_variant || 'peach';
+
+          return (
+            <article key={course.id} className="course-item">
+              <Link
+                to={`/courses/${course.id}`}
+                className={`course-tile tile--${variant}`}
+              >
+                <div className="course-tile__clip" aria-hidden="true" />
+                <div className="course-tile__title">{uiTitle}</div>
+              </Link>
+
+              {canManage && (
+                <div className="course-admin">
+                  <button className="danger" onClick={() => removeCourse(course.id)}>
+                    Удалить
+                  </button>
+                </div>
+              )}
+            </article>
+          );
+        })}
       </div>
     </div>
   );
