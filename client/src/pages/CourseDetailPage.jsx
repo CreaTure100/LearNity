@@ -61,11 +61,9 @@ export function CourseDetailPage() {
   }, [id, token]);
 
   useEffect(() => {
-    let cancelled = false;
     (async () => {
       await load();
     })();
-    return () => { cancelled = true; };
   }, [load]);
 
   const toggleModule = (moduleId) => {

@@ -1,26 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { StylePicker } from './StylePicker';
 
-export function ModuleEditorModal({ module, onSave, onClose }) {
-  const [form, setForm] = useState({
-    title: '',
-    description: '',
-    position: '',
-    ui_variant: 'lavender',
-    ui_title: '',
-  });
+function getInitialForm(module) {
+  return {
+    title: module?.title || '',
+    description: module?.description || '',
+    position: module?.position || '',
+    ui_variant: module?.ui_variant || 'lavender',
+    ui_title: module?.ui_title || '',
+  };
+}
 
-  useEffect(() => {
-    if (module) {
-      setForm({
-        title: module.title || '',
-        description: module.description || '',
-        position: module.position || '',
-        ui_variant: module.ui_variant || 'lavender',
-        ui_title: module.ui_title || '',
-      });
-    }
-  }, [module]);
+export function ModuleEditorModal({ module, onSave, onClose }) {
+  const [form, setForm] = useState(() => getInitialForm(module));
 
   const set = (field) => (e) => setForm((s) => ({ ...s, [field]: e.target.value }));
 

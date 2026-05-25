@@ -21,13 +21,16 @@ Backend по умолчанию стартует на `http://localhost:4000`.
 
 - `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`
 - `GET/POST/PATCH/DELETE /api/courses`
-- `GET/POST /api/courses/:courseId/lessons`, `PATCH/DELETE /api/lessons/:id`
+- `GET/POST /api/courses/:courseId/modules`, `PATCH/DELETE /api/modules/:id`
+- `GET/POST /api/modules/:moduleId/lessons`, `GET/PATCH/DELETE /api/lessons/:id`
 - `GET/POST /api/lessons/:lessonId/assignments`, `PATCH/DELETE /api/assignments/:id`, `POST /api/assignments/:id/submit`
 - `GET/POST/DELETE /api/common-words`
 - `GET/POST/DELETE /api/personal-words/my`
   - `POST /api/personal-words/my` **автоматически** создаёт `user_word_progress` с `source_type='personal'` в транзакции.
 - `GET /api/repetition/today`, `POST /api/repetition/review`
 - `GET /api/stats/my`
+
+Для `courses/modules/lessons` поддерживаются поля `title`, `description`, а также UI-настройки `ui_variant` и `ui_title` (пресет стиля и кастомный заголовок карточки).
 
 ## 2) Запуск frontend (`client`)
 
