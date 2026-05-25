@@ -3,6 +3,29 @@ import { useParams, Link } from 'react-router-dom';
 import { http } from '../api/http';
 import { useAuth } from '../context/AuthContext';
 
+
+function toYouTubeEmbedUrl(url) {
+  if (!url) return null;
+
+  // already embed
+  if (url.includes('youtube.com/embed/')) return url;
+
+  // youtu.be/<id>
+  const short = url.match(/youtu\.be\/([A-Za-z0-9_-]{6,})/);
+  if (short) return `https://www.youtube.com/embed/${short[1]}`;
+
+  // youtube.com/watch?v=<id>
+  try {
+    const u = new URL(url);
+    const v = u.searchParams.get('v');
+    if (v) return `https://www.youtube.com/embed/${v}`;
+  } catch {
+    // ignore
+  }
+
+  return null;
+}
+
 export function LessonPage() {
   const { id: courseId, lessonId } = useParams();
   const { token, user } = useAuth();
@@ -123,9 +146,36 @@ export function LessonPage() {
         </div>
         {lesson?.description && <p className="lesson-page__desc">{lesson.description}</p>}
         {lesson?.video_url && (
-          <a href={lesson.video_url} target="_blank" rel="noreferrer" className="lesson-page__video-link">
-            ▶ Открыть видео
-          </a>
+          (() => {
+            const embedUrl = toYouTubeEmbedUrl(lesson.video_url);
+            if (!embedUrl) {
+              return (
+                <a href={lesson.video_url} target="_blank" rel="noreferrer" className="lesson-page__video-link">
+                  ▶ Открыть видео
+                </a>
+              );
+            }
+
+            return (
+              <div className="lesson-page__video card">
+                <div className="video-embed">
+                  <iframe
+                    src={embedUrl}
+                    title="Lesson video"
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                  />
+                </div>
+
+                <div className="video-fallback">
+                  <a href={lesson.video_url} target="_blank" rel="noreferrer" className="lesson-page__video-link">
+                    Открыть на YouTube
+                  </a>
+                </div>
+              </div>
+            );
+          })()
         )}
       </div>
 
