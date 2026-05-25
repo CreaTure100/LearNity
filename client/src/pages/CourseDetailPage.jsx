@@ -1,7 +1,20 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useEffect, useState, useCallback } from 'react';
+import { useParams, Link } from 'react-router-dom';
 import { http } from '../api/http';
 import { useAuth } from '../context/AuthContext';
+import { CourseEditorModal } from '../components/CourseEditorModal';
+import { ModuleEditorModal } from '../components/ModuleEditorModal';
+import { LessonEditorModal } from '../components/LessonEditorModal';
+
+/** Склонение слова по числу: plural(3, 'урок', 'урока', 'уроков') */
+function plural(n, one, two, five) {
+  const abs = Math.abs(n) % 100;
+  const last = abs % 10;
+  if (abs > 10 && abs < 20) return `${n} ${five}`;
+  if (last > 1 && last < 5) return `${n} ${two}`;
+  if (last === 1) return `${n} ${one}`;
+  return `${n} ${five}`;
+}
 
 export function CourseDetailPage() {
   const { id } = useParams();
@@ -9,155 +22,244 @@ export function CourseDetailPage() {
   const canManage = user?.role === 'teacher' || user?.role === 'admin';
 
   const [course, setCourse] = useState(null);
-  const [lessons, setLessons] = useState([]);
-  const [assignments, setAssignments] = useState({});
+  const [modules, setModules] = useState([]);
+  const [lessonsByModule, setLessonsByModule] = useState({});
   const [error, setError] = useState('');
+  const [expandedModules, setExpandedModules] = useState({});
 
-  const [lessonForm, setLessonForm] = useState({ title: '', order_index: 1, description: '', video_url: '' });
-  const [assignmentForm, setAssignmentForm] = useState({ prompt: '', options: 'A|B', correct_option_id: '0', score: 1 });
-  const [activeLesson, setActiveLesson] = useState('');
+  // Modals
+  const [showCourseEditor, setShowCourseEditor] = useState(false);
+  const [editingModule, setEditingModule] = useState(undefined); // undefined = closed, null = new, obj = editing
+  const [editingLesson, setEditingLesson] = useState(undefined);
+  const [lessonTargetModuleId, setLessonTargetModuleId] = useState(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
-      const [courseData, lessonsData] = await Promise.all([
+      const [courseData, modulesData] = await Promise.all([
         http(`/courses/${id}`, { token }),
-        http(`/courses/${id}/lessons`, { token }),
+        http(`/courses/${id}/modules`, { token }),
       ]);
       setCourse(courseData);
-      setLessons(lessonsData);
+      setModules(modulesData);
 
-      const assignmentEntries = await Promise.all(
-        lessonsData.map(async (lesson) => [lesson.id, await http(`/lessons/${lesson.id}/assignments`, { token })]),
+      // Load lessons for each module
+      const entries = await Promise.all(
+        modulesData.map(async (mod) => {
+          const lessons = await http(`/modules/${mod.id}/lessons`, { token });
+          return [mod.id, lessons];
+        }),
       );
-      setAssignments(Object.fromEntries(assignmentEntries));
+      setLessonsByModule(Object.fromEntries(entries));
+
+      // Auto-expand all modules
+      const expanded = {};
+      modulesData.forEach((m) => { expanded[m.id] = true; });
+      setExpandedModules((prev) => ({ ...expanded, ...prev }));
     } catch (err) {
       setError(err.message);
     }
-  };
+  }, [id, token]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        const [courseData, lessonsData] = await Promise.all([
-          http(`/courses/${id}`, { token }),
-          http(`/courses/${id}/lessons`, { token }),
-        ]);
-        if (cancelled) return;
-
-        setCourse(courseData);
-        setLessons(lessonsData);
-
-        const assignmentEntries = await Promise.all(
-          lessonsData.map(async (lesson) => [lesson.id, await http(`/lessons/${lesson.id}/assignments`, { token })]),
-        );
-        if (!cancelled) {
-          setAssignments(Object.fromEntries(assignmentEntries));
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err.message);
-        }
-      }
+      await load();
     })();
+    return () => { cancelled = true; };
+  }, [load]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [id, token]);
+  const toggleModule = (moduleId) => {
+    setExpandedModules((prev) => ({ ...prev, [moduleId]: !prev[moduleId] }));
+  };
 
-  const createLesson = async (e) => {
-    e.preventDefault();
-    await http(`/courses/${id}/lessons`, { method: 'POST', token, body: { ...lessonForm, order_index: Number(lessonForm.order_index) } });
-    setLessonForm({ title: '', order_index: 1, description: '', video_url: '' });
+  /* ---- Course actions ---- */
+  const saveCourse = async (data) => {
+    if (course) {
+      await http(`/courses/${id}`, { method: 'PATCH', token, body: data });
+    } else {
+      await http('/courses', { method: 'POST', token, body: data });
+    }
+    setShowCourseEditor(false);
+    await load();
+  };
+
+  /* ---- Module actions ---- */
+  const saveModule = async (data) => {
+    if (editingModule && editingModule.id) {
+      await http(`/modules/${editingModule.id}`, { method: 'PATCH', token, body: data });
+    } else {
+      await http(`/courses/${id}/modules`, { method: 'POST', token, body: data });
+    }
+    setEditingModule(undefined);
+    await load();
+  };
+
+  const deleteModule = async (moduleId) => {
+    if (!confirm('Удалить модуль со всеми уроками?')) return;
+    await http(`/modules/${moduleId}`, { method: 'DELETE', token });
+    await load();
+  };
+
+  /* ---- Lesson actions ---- */
+  const saveLesson = async (data) => {
+    if (editingLesson && editingLesson.id) {
+      await http(`/lessons/${editingLesson.id}`, { method: 'PATCH', token, body: data });
+    } else {
+      await http(`/modules/${lessonTargetModuleId}/lessons`, { method: 'POST', token, body: data });
+    }
+    setEditingLesson(undefined);
+    setLessonTargetModuleId(null);
     await load();
   };
 
   const deleteLesson = async (lessonId) => {
+    if (!confirm('Удалить урок?')) return;
     await http(`/lessons/${lessonId}`, { method: 'DELETE', token });
     await load();
   };
 
-  const createAssignment = async (e) => {
-    e.preventDefault();
-    const options = assignmentForm.options.split('|').map((text, index) => ({ id: String(index), text: text.trim() })).filter((x) => x.text);
-    await http(`/lessons/${activeLesson}/assignments`, {
-      method: 'POST',
-      token,
-      body: {
-        prompt: assignmentForm.prompt,
-        options,
-        correct_option_id: assignmentForm.correct_option_id,
-        score: Number(assignmentForm.score),
-      },
-    });
-    setAssignmentForm({ prompt: '', options: 'A|B', correct_option_id: '0', score: 1 });
-    await load();
+  /* ---- Helpers ---- */
+  const LESSON_VARIANTS = {
+    sky:    { paper: '#a8d8ea', under: '#aa96da' },
+    mint:   { paper: '#a8e6cf', under: '#dcedc1' },
+    peach:  { paper: '#ffd3b6', under: '#ffaaa5' },
+    lilac:  { paper: '#d4a5f5', under: '#f0c6ff' },
+    lemon:  { paper: '#fff5a0', under: '#ffc97e' },
   };
 
-  const submitAnswer = async (assignmentId, selected_option_id) => {
-    const result = await http(`/assignments/${assignmentId}/submit`, { method: 'POST', token, body: { selected_option_id } });
-    alert(result.message);
-    await load();
-  };
+  const MODULE_VARIANTS = ['blue', 'green', 'lavender', 'sand', 'pink'];
 
-  const deleteAssignment = async (assignmentId) => {
-    await http(`/assignments/${assignmentId}`, { method: 'DELETE', token });
-    await load();
-  };
+  const totalLessons = Object.values(lessonsByModule).reduce((sum, arr) => sum + arr.length, 0);
 
   return (
-    <div>
-      <h2>{course?.title || 'Курс'}</h2>
+    <div className="course-detail">
+      {/* Breadcrumb */}
+      <div className="breadcrumb">
+        <Link to="/courses">Курсы</Link>
+        <span className="breadcrumb__sep">›</span>
+        <span>{course?.title || '...'}</span>
+      </div>
+
+      {/* Course header */}
+      <div className="course-detail__header">
+        <div className="course-detail__info">
+          <h2>{course?.title || 'Курс'}</h2>
+          {course?.description && <p>{course.description}</p>}
+          <div className="course-detail__badges">
+            {course?.level && <span className="course-detail__level">{course.level}</span>}
+            <span className="course-detail__badge">{plural(modules.length, 'модуль', 'модуля', 'модулей')}</span>
+            <span className="course-detail__badge">{plural(totalLessons, 'урок', 'урока', 'уроков')}</span>
+          </div>
+        </div>
+        {canManage && (
+          <div className="course-detail__actions">
+            <button className="btn-icon" onClick={() => setShowCourseEditor(true)} title="Настроить курс">⚙️</button>
+            <button onClick={() => setEditingModule(null)}>+ Модуль</button>
+          </div>
+        )}
+      </div>
+
       {error && <p className="error">{error}</p>}
 
-      {canManage && (
-        <form className="card" onSubmit={createLesson}>
-          <h3>Добавить урок</h3>
-          <input placeholder="Название" value={lessonForm.title} onChange={(e) => setLessonForm((s) => ({ ...s, title: e.target.value }))} required />
-          <input type="number" min="1" placeholder="Порядок" value={lessonForm.order_index} onChange={(e) => setLessonForm((s) => ({ ...s, order_index: e.target.value }))} required />
-          <textarea placeholder="Описание" value={lessonForm.description} onChange={(e) => setLessonForm((s) => ({ ...s, description: e.target.value }))} />
-          <input placeholder="Ссылка на видео" value={lessonForm.video_url} onChange={(e) => setLessonForm((s) => ({ ...s, video_url: e.target.value }))} />
-          <button type="submit">Создать урок</button>
-        </form>
-      )}
+      {/* Modules */}
+      <div className="module-grid">
+        {modules.length === 0 && (
+          <div className="empty-state">
+            <div className="empty-state__icon">📚</div>
+            <p>Модулей пока нет</p>
+            {canManage && <button onClick={() => setEditingModule(null)}>Создать первый модуль</button>}
+          </div>
+        )}
+        {modules.map((mod, mi) => {
+          const variant = mod.ui_variant || MODULE_VARIANTS[mi % MODULE_VARIANTS.length];
+          const modTitle = mod.ui_title || mod.title;
+          const lessons = lessonsByModule[mod.id] || [];
+          const isExpanded = expandedModules[mod.id];
 
-      {canManage && (
-        <form className="card" onSubmit={createAssignment}>
-          <h3>Добавить задание</h3>
-          <select value={activeLesson} onChange={(e) => setActiveLesson(e.target.value)} required>
-            <option value="">Выберите урок</option>
-            {lessons.map((l) => <option key={l.id} value={l.id}>{l.title}</option>)}
-          </select>
-          <input placeholder="Вопрос" value={assignmentForm.prompt} onChange={(e) => setAssignmentForm((s) => ({ ...s, prompt: e.target.value }))} required />
-          <input placeholder="Варианты через |" value={assignmentForm.options} onChange={(e) => setAssignmentForm((s) => ({ ...s, options: e.target.value }))} required />
-          <input placeholder="ID правильного варианта" value={assignmentForm.correct_option_id} onChange={(e) => setAssignmentForm((s) => ({ ...s, correct_option_id: e.target.value }))} required />
-          <input type="number" min="0" value={assignmentForm.score} onChange={(e) => setAssignmentForm((s) => ({ ...s, score: e.target.value }))} />
-          <button type="submit">Создать задание</button>
-        </form>
-      )}
-
-      {lessons.map((lesson) => (
-        <section key={lesson.id} className="card">
-          <h3>{lesson.order_index}. {lesson.title}</h3>
-          <p>{lesson.description}</p>
-          {lesson.video_url && <a href={lesson.video_url} target="_blank" rel="noreferrer">Открыть видео</a>}
-          {canManage && <button className="danger" onClick={() => deleteLesson(lesson.id)}>Удалить урок</button>}
-
-          <h4>Задания</h4>
-          {(assignments[lesson.id] || []).map((assignment) => (
-            <div className="assignment" key={assignment.id}>
-              <p>{assignment.prompt}</p>
-              <div className="inline-actions">
-                {assignment.options.map((option) => (
-                  <button key={option.id} className="secondary" onClick={() => submitAnswer(assignment.id, option.id)}>{option.text}</button>
-                ))}
-                {canManage && <button className="danger" onClick={() => deleteAssignment(assignment.id)}>Удалить</button>}
+          return (
+            <div key={mod.id} className={`module-section ${isExpanded ? 'module-section--expanded' : ''}`}>
+              {/* Module tile */}
+              <div
+                className={`module-tile module--${variant}`}
+                onClick={() => toggleModule(mod.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && toggleModule(mod.id)}
+              >
+                <div className="module-tile__pin" aria-hidden="true" />
+                <div className="module-tile__title">{modTitle}</div>
+                <div className="module-tile__meta">
+                  {mod.description && <p className="module-tile__desc">{mod.description}</p>}
+                  <span className="module-tile__count">{plural(lessons.length, 'урок', 'урока', 'уроков')}</span>
+                  <span className={`module-tile__chevron ${isExpanded ? 'module-tile__chevron--open' : ''}`}>▼</span>
+                </div>
+                {canManage && (
+                  <div className="module-tile__admin" onClick={(e) => e.stopPropagation()}>
+                    <button className="btn-icon-sm" onClick={() => setEditingModule(mod)} title="Настроить">⚙️</button>
+                    <button className="btn-icon-sm danger-icon" onClick={() => deleteModule(mod.id)} title="Удалить">🗑</button>
+                  </div>
+                )}
               </div>
+
+              {/* Expanded: lessons list */}
+              {isExpanded && (
+                <div className="lesson-list">
+                  {canManage && (
+                    <button
+                      className="lesson-add-btn"
+                      onClick={() => { setLessonTargetModuleId(mod.id); setEditingLesson(null); }}
+                    >
+                      + Добавить урок
+                    </button>
+                  )}
+                  {lessons.length === 0 && <p className="muted lesson-empty">Уроков пока нет</p>}
+                  {lessons.map((lesson) => {
+                    const lVar = lesson.ui_variant || 'sky';
+                    const colors = LESSON_VARIANTS[lVar] || LESSON_VARIANTS.sky;
+                    const lTitle = lesson.ui_title || lesson.title;
+
+                    return (
+                      <div key={lesson.id} className="lesson-tile-wrap">
+                        <Link
+                          to={`/courses/${id}/lessons/${lesson.id}`}
+                          className="lesson-tile"
+                          style={{
+                            '--l-paper': colors.paper,
+                            '--l-under': colors.under,
+                          }}
+                        >
+                          <span className="lesson-tile__index">{lesson.order_index}</span>
+                          <span className="lesson-tile__title">{lTitle}</span>
+                          {lesson.description && (
+                            <span className="lesson-tile__desc">{lesson.description}</span>
+                          )}
+                        </Link>
+                        {canManage && (
+                          <div className="lesson-tile__admin">
+                            <button className="btn-icon-sm" onClick={() => setEditingLesson(lesson)} title="Настроить">⚙️</button>
+                            <button className="btn-icon-sm danger-icon" onClick={() => deleteLesson(lesson.id)} title="Удалить">🗑</button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          ))}
-        </section>
-      ))}
+          );
+        })}
+      </div>
+
+      {/* Modals */}
+      {showCourseEditor && (
+        <CourseEditorModal course={course} onSave={saveCourse} onClose={() => setShowCourseEditor(false)} />
+      )}
+      {editingModule !== undefined && (
+        <ModuleEditorModal module={editingModule} onSave={saveModule} onClose={() => setEditingModule(undefined)} />
+      )}
+      {editingLesson !== undefined && (
+        <LessonEditorModal lesson={editingLesson} onSave={saveLesson} onClose={() => { setEditingLesson(undefined); setLessonTargetModuleId(null); }} />
+      )}
     </div>
   );
 }

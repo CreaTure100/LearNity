@@ -35,11 +35,11 @@ router.post(
   validate,
   async (req, res, next) => {
     try {
-      const { title, description = null, level = null, cover_image_url = null, is_published = true } = req.body;
+      const { title, description = null, level = null, cover_image_url = null, is_published = true, ui_variant = null, ui_title = null } = req.body;
       const ownerId = req.user.role === 'teacher' ? req.user.id : req.body.owner_teacher_id || null;
       const result = await db.query(
-        'INSERT INTO courses(title, description, level, cover_image_url, owner_teacher_id, is_published) VALUES($1,$2,$3,$4,$5,$6) RETURNING *',
-        [title, description, level, cover_image_url, ownerId, is_published],
+        'INSERT INTO courses(title, description, level, cover_image_url, owner_teacher_id, is_published, ui_variant, ui_title) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
+        [title, description, level, cover_image_url, ownerId, is_published, ui_variant, ui_title],
       );
       return res.status(201).json(result.rows[0]);
     } catch (error) {
@@ -67,7 +67,7 @@ router.patch(
 
       const merged = { ...current.rows[0], ...req.body };
       const updated = await db.query(
-        'UPDATE courses SET title=$1, description=$2, level=$3, cover_image_url=$4, is_published=$5, owner_teacher_id=$6 WHERE id=$7 RETURNING *',
+        'UPDATE courses SET title=$1, description=$2, level=$3, cover_image_url=$4, is_published=$5, owner_teacher_id=$6, ui_variant=$7, ui_title=$8 WHERE id=$9 RETURNING *',
         [
           merged.title,
           merged.description,
@@ -75,6 +75,8 @@ router.patch(
           merged.cover_image_url,
           merged.is_published,
           merged.owner_teacher_id,
+          merged.ui_variant || null,
+          merged.ui_title || null,
           id,
         ],
       );

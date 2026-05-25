@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { http } from '../api/http';
 import { useAuth } from '../context/AuthContext';
+import { CourseEditorModal } from '../components/CourseEditorModal';
 
 export function CoursesPage() {
   const { token, user } = useAuth();
   const [courses, setCourses] = useState([]);
   const [error, setError] = useState('');
-  const [form, setForm] = useState({ title: '', description: '' });
+  const [showCreate, setShowCreate] = useState(false);
+  const [editingCourse, setEditingCourse] = useState(null);
 
   const canManage = user?.role === 'teacher' || user?.role === 'admin';
 
@@ -39,30 +41,34 @@ export function CoursesPage() {
     };
   }, [token]);
 
-  const createCourse = async (e) => {
-    e.preventDefault();
-    await http('/courses', { method: 'POST', token, body: form });
-    setForm({ title: '', description: '' });
+  const createCourse = async (data) => {
+    await http('/courses', { method: 'POST', token, body: data });
+    setShowCreate(false);
+    await load();
+  };
+
+  const updateCourse = async (data) => {
+    await http(`/courses/${editingCourse.id}`, { method: 'PATCH', token, body: data });
+    setEditingCourse(null);
     await load();
   };
 
   const removeCourse = async (id) => {
+    if (!confirm('Удалить курс со всеми модулями и уроками?')) return;
     await http(`/courses/${id}`, { method: 'DELETE', token });
     await load();
   };
 
   return (
     <div>
-      <h2>Курсы</h2>
+      <div className="page-header">
+        <h2>Курсы</h2>
+        {canManage && (
+          <button onClick={() => setShowCreate(true)}>+ Создать курс</button>
+        )}
+      </div>
+
       {error && <p className="error">{error}</p>}
-      {canManage && (
-        <form className="card" onSubmit={createCourse}>
-          <h3>Создать курс</h3>
-          <input placeholder="Название" value={form.title} onChange={(e) => setForm((s) => ({ ...s, title: e.target.value }))} required />
-          <textarea placeholder="Описание" value={form.description} onChange={(e) => setForm((s) => ({ ...s, description: e.target.value }))} />
-          <button type="submit">Создать</button>
-        </form>
-      )}
 
       <div className="course-grid">
         {[...courses].reverse().map((course) => {
@@ -84,6 +90,9 @@ export function CoursesPage() {
 
               {canManage && (
                 <div className="course-admin">
+                  <button className="btn-icon" onClick={() => setEditingCourse(course)} title="Настроить">
+                    ⚙️
+                  </button>
                   <button className="danger" onClick={() => removeCourse(course.id)}>
                     Удалить
                   </button>
@@ -93,6 +102,16 @@ export function CoursesPage() {
           );
         })}
       </div>
+
+      {/* Create modal */}
+      {showCreate && (
+        <CourseEditorModal course={null} onSave={createCourse} onClose={() => setShowCreate(false)} />
+      )}
+
+      {/* Edit modal */}
+      {editingCourse && (
+        <CourseEditorModal course={editingCourse} onSave={updateCourse} onClose={() => setEditingCourse(null)} />
+      )}
     </div>
   );
 }

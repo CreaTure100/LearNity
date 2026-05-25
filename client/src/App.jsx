@@ -7,6 +7,7 @@ import { RegisterPage } from './pages/RegisterPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { CoursesPage } from './pages/CoursesPage';
 import { CourseDetailPage } from './pages/CourseDetailPage';
+import { LessonPage } from './pages/LessonPage';
 import { DictionaryPage } from './pages/DictionaryPage';
 
 function App() {
@@ -28,6 +29,7 @@ function App() {
             <Route index element={<DashboardPage />} />
             <Route path="courses" element={<CoursesPage />} />
             <Route path="courses/:id" element={<CourseDetailPage />} />
+            <Route path="courses/:id/lessons/:lessonId" element={<LessonPage />} />
             <Route path="dictionary" element={<DictionaryPage />} />
           </Route>
 
