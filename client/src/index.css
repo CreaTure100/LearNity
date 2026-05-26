@@ -1115,6 +1115,116 @@ select:focus {
   margin-top: 8px;
 }
 
+.deck-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.deck-card {
+  background: white;
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 8px 22px rgba(17, 24, 39, 0.08);
+  display: grid;
+  gap: 14px;
+}
+
+.deck-card h3 {
+  margin: 0;
+}
+
+.deck-counters {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.deck-counters p {
+  margin: 0;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.deck-counters span {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.deck-counters strong {
+  font-size: 26px;
+}
+
+.deck-study-page {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.deck-study-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.secondary-link {
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.study-card {
+  min-height: 360px;
+  background: white;
+  border-radius: 18px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.1);
+  display: grid;
+  align-content: space-between;
+  padding: 28px;
+}
+
+.study-card-inner {
+  text-align: center;
+  margin-top: 30px;
+}
+
+.study-card-inner h3 {
+  font-size: 44px;
+  margin: 14px 0 10px;
+}
+
+.study-label {
+  color: #6b7280;
+  margin: 0;
+}
+
+.study-translation {
+  font-size: 24px;
+  margin: 0;
+}
+
+.study-meta {
+  margin-top: 12px;
+  color: #4b5563;
+}
+
+.study-answer-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.study-easy-btn {
+  background: #059669;
+}
+.study-easy-btn:hover {
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3);
+}
+
 /* =========================================
    Animations
    ========================================= */
