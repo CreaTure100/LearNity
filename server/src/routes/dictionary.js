@@ -129,16 +129,8 @@ router.post(
         ],
       );
 
-      const personalWord = inserted.rows[0];
-      await client.query(
-        `INSERT INTO user_word_progress(user_id, source_type, personal_word_id, next_review_date)
-         VALUES($1, 'personal', $2, CURRENT_DATE)
-         ON CONFLICT (user_id, personal_word_id) WHERE source_type='personal' DO NOTHING`,
-        [req.user.id, personalWord.id],
-      );
-
       await client.query('COMMIT');
-      return res.status(201).json(personalWord);
+      return res.status(201).json(inserted.rows[0]);
     } catch (error) {
       await client.query('ROLLBACK');
       if (error.code === '23505') {

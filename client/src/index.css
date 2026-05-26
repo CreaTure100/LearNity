@@ -169,6 +169,132 @@ select:focus {
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 }
 
+.deck-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.deck-card {
+  background: white;
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.deck-card h3 {
+  margin-top: 0;
+  margin-bottom: 14px;
+}
+
+.deck-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.deck-metrics p {
+  margin: 0;
+  padding: 10px;
+  background: #f9fafb;
+  border-radius: 10px;
+  text-align: center;
+}
+
+.deck-metrics span {
+  display: block;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.deck-metrics strong {
+  font-size: 20px;
+}
+
+.deck-actions {
+  margin-top: 14px;
+}
+
+.dictionary-advanced summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.study-card-wrap {
+  display: grid;
+  gap: 14px;
+}
+
+.study-card {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.08);
+}
+
+.study-card h3 {
+  font-size: 42px;
+  margin: 8px 0;
+}
+
+.study-state {
+  margin: 0;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.study-transcription {
+  margin: 0 0 10px;
+  color: #4b5563;
+}
+
+.study-translation {
+  font-size: 22px;
+  margin: 8px 0;
+}
+
+.study-definition,
+.study-example {
+  margin: 6px 0;
+  color: #374151;
+}
+
+.study-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.study-easy {
+  background: #059669;
+}
+
+.study-easy:hover {
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3);
+}
+
+.inline-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  padding: 10px 16px;
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.inline-link-btn.secondary {
+  background: #6b7280;
+}
+
+@media (max-width: 700px) {
+  .study-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 .error {
   color: #b91c1c;
 }
