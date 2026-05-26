@@ -16,11 +16,13 @@ router.post('/repetition/review', authRequired, [body('progress_id').isUUID(), b
 
     const progress = progressResult.rows[0];
     const next = calculateNextReview(progress, req.body.quality);
+    const nextReviewAt = new Date();
+    nextReviewAt.setDate(nextReviewAt.getDate() + next.intervalDays);
     const updated = await db.query(
       `UPDATE user_word_progress
-       SET repetitions=$1, interval_days=$2, easiness_factor=$3, next_review_date=$4, last_reviewed_at=NOW()
-       WHERE id=$5 RETURNING *`,
-      [next.repetitions, next.intervalDays, next.easinessFactor, next.nextReviewDate, progress.id],
+       SET repetitions=$1, interval_days=$2, easiness_factor=$3, next_review_date=$4, next_review_at=$5, state='review', step_index=0, last_reviewed_at=NOW()
+       WHERE id=$6 RETURNING *`,
+      [next.repetitions, next.intervalDays, next.easinessFactor, next.nextReviewDate, nextReviewAt.toISOString(), progress.id],
     );
 
     return res.json({ message: 'Результат повторения сохранён', progress: updated.rows[0] });

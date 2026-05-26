@@ -195,8 +195,10 @@ router.get('/repetition/today', authRequired, [query('source').optional().isIn([
        FROM user_word_progress p
        LEFT JOIN common_words cw ON cw.id = p.common_word_id
        LEFT JOIN personal_words pw ON pw.id = p.personal_word_id
-       WHERE p.user_id=$1 AND p.next_review_date <= CURRENT_DATE ${sourceSql}
-       ORDER BY p.next_review_date ASC, p.created_at ASC`,
+       WHERE p.user_id=$1
+         AND COALESCE(p.next_review_at, p.next_review_date::timestamptz) <= NOW()
+         ${sourceSql}
+       ORDER BY COALESCE(p.next_review_at, p.next_review_date::timestamptz) ASC, p.created_at ASC`,
       values,
     );
 

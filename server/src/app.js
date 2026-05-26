@@ -10,6 +10,7 @@ const dictionaryRoutes = require('./routes/dictionary');
 const repetitionRoutes = require('./routes/repetition');
 const statsRoutes = require('./routes/stats');
 const modulesRoutes = require('./routes/modules');
+const decksRoutes = require('./routes/decks');
 
 const app = express();
 
@@ -59,6 +60,7 @@ app.use('/api', dictionaryRoutes);
 app.use('/api', repetitionRoutes);
 app.use('/api', statsRoutes);
 app.use('/api', modulesRoutes);
+app.use('/api', decksRoutes);
 app.use((req, res) => {
   res.status(404).json({ message: 'Маршрут не найден' });
 });
