@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { rateLimit } = require('express-rate-limit');
-
+const path = require('path');
 const authRoutes = require('./routes/auth');
 const coursesRoutes = require('./routes/courses');
 const lessonsRoutes = require('./routes/lessons');
@@ -62,7 +62,7 @@ app.use('/api', modulesRoutes);
 app.use((req, res) => {
   res.status(404).json({ message: 'Маршрут не найден' });
 });
-
+app.use('/videos', express.static(path.join(__dirname, '..', 'public', 'videos')));
 app.use((error, req, res, next) => {
   console.error(error);
   const status = error.status || 500;

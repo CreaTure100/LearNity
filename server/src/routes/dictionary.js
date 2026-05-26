@@ -23,10 +23,23 @@ router.post(
   validate,
   async (req, res, next) => {
     try {
-      const { word, transcription = null, audio_url = null, translation = null, example = null, definition = null } = req.body;
+      const {
+        word,
+        transcription = null,
+        translation = null,
+        example = null,
+        definition = null,
+        definition_en = null,
+        example_en = null,
+        definition_ru = null,
+      } = req.body;
+
       const result = await db.query(
-        'INSERT INTO common_words(word, transcription, audio_url, translation, example, definition) VALUES($1,$2,$3,$4,$5,$6) RETURNING *',
-        [word, transcription, audio_url, translation, example, definition],
+        `INSERT INTO common_words(
+     word, transcription, translation, example, definition,
+     definition_en, example_en, definition_ru
+   ) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+        [word, transcription, translation, example, definition, definition_en, example_en, definition_ru],
       );
       return res.status(201).json(result.rows[0]);
     } catch (error) {
@@ -80,7 +93,6 @@ router.post(
       let wordData = {
         word: req.body.word,
         transcription: req.body.transcription || null,
-        audio_url: req.body.audio_url || null,
         translation: req.body.translation || null,
         example: req.body.example || null,
         definition: req.body.definition || null,
@@ -97,7 +109,6 @@ router.post(
         wordData = {
           word: req.body.word || cw.word,
           transcription: req.body.transcription || cw.transcription,
-          audio_url: req.body.audio_url || cw.audio_url,
           translation: req.body.translation || cw.translation,
           example: req.body.example || cw.example,
           definition: req.body.definition || cw.definition,
@@ -106,13 +117,12 @@ router.post(
       }
 
       const inserted = await client.query(
-        'INSERT INTO personal_words(user_id, common_word_id, word, transcription, audio_url, translation, example, definition) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
+        'INSERT INTO personal_words(user_id, common_word_id, word, transcription, translation, example, definition) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *',
         [
           req.user.id,
           wordData.common_word_id,
           wordData.word,
           wordData.transcription,
-          wordData.audio_url,
           wordData.translation,
           wordData.example,
           wordData.definition,
