@@ -18,8 +18,8 @@ function getWordJoinSql() {
   return `COALESCE(cw.word, pw.word) AS word,
           COALESCE(cw.translation, pw.translation) AS translation,
           COALESCE(cw.transcription, pw.transcription) AS transcription,
-          COALESCE(cw.example, pw.example) AS example,
-          COALESCE(cw.definition, pw.definition) AS definition`;
+          COALESCE(cw.example_en, pw.example) AS example,
+          COALESCE(cw.definition_en, pw.definition) AS definition`;
 }
 
 function getSourceFilter(deck) {
