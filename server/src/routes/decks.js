@@ -9,21 +9,6 @@ const router = express.Router();
 
 const DECKS = ['common', 'personal'];
 const DEFAULT_STEPS = [2, 16];
-const HARD_INTERVAL_MINUTES = 8;
-
-function addMinutes(baseDate, minutes) {
-  return new Date(baseDate.getTime() + minutes * 60 * 1000);
-}
-
-function addDays(baseDate, days) {
-  const next = new Date(baseDate);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
-function toReviewDate(value) {
-  return value.toISOString().slice(0, 10);
-}
 
 function normalizeSteps(steps) {
   if (!Array.isArray(steps) || steps.length === 0) {
@@ -352,91 +337,15 @@ async function createProgress(client, userId, deck, wordId) {
   return inserted.rows[0];
 }
 
-function computeLearningTransition(progress, rating, settings, now) {
-  const steps = normalizeSteps(settings.learning_steps_minutes);
-  const firstStep = steps[0] || DEFAULT_STEPS[0];
-
-  if (rating === 'again') {
-    return {
-      state: progress.state === 'relearning' ? 'relearning' : 'learning',
-      stepIndex: 0,
-      nextReviewAt: addMinutes(now, firstStep),
-      intervalDays: 0,
-      repetitions: 0,
-      easinessFactor: Number(progress.easiness_factor),
-    };
+function getOverdueDays(progress, now) {
+  if (!progress?.next_review_at || progress.state !== 'review') {
+    return 0;
   }
-
-  if (rating === 'hard') {
-    return {
-      state: progress.state === 'relearning' ? 'relearning' : 'learning',
-      stepIndex: Math.min(progress.step_index || 0, Math.max(steps.length - 1, 0)),
-      nextReviewAt: addMinutes(now, HARD_INTERVAL_MINUTES),
-      intervalDays: 0,
-      repetitions: progress.repetitions,
-      easinessFactor: Number(progress.easiness_factor),
-    };
+  const diffMs = now.getTime() - new Date(progress.next_review_at).getTime();
+  if (!Number.isFinite(diffMs) || diffMs <= 0) {
+    return 0;
   }
-
-  if (rating === 'good') {
-    const nextStep = (progress.step_index || 0) + 1;
-    if (nextStep < steps.length) {
-      return {
-        state: progress.state === 'relearning' ? 'relearning' : 'learning',
-        stepIndex: nextStep,
-        nextReviewAt: addMinutes(now, steps[nextStep]),
-        intervalDays: 0,
-        repetitions: progress.repetitions,
-        easinessFactor: Number(progress.easiness_factor),
-      };
-    }
-
-    return {
-      state: 'review',
-      stepIndex: 0,
-      nextReviewAt: addDays(now, settings.graduating_interval_days),
-      intervalDays: settings.graduating_interval_days,
-      repetitions: Math.max(progress.repetitions, 1),
-      easinessFactor: Number(progress.easiness_factor),
-    };
-  }
-
-  return {
-    state: 'review',
-    stepIndex: 0,
-    nextReviewAt: addDays(now, settings.easy_interval_days),
-    intervalDays: settings.easy_interval_days,
-    repetitions: Math.max(progress.repetitions, 1),
-    easinessFactor: Number(progress.easiness_factor),
-  };
-}
-
-function computeReviewTransition(progress, rating, settings, now) {
-  const steps = normalizeSteps(settings.learning_steps_minutes);
-  const firstStep = steps[0] || DEFAULT_STEPS[0];
-
-  if (rating === 'again') {
-    return {
-      state: 'relearning',
-      stepIndex: 0,
-      nextReviewAt: addMinutes(now, firstStep),
-      intervalDays: 0,
-      repetitions: 0,
-      easinessFactor: Number(progress.easiness_factor),
-    };
-  }
-
-  const quality = rating === 'hard' ? 3 : rating === 'good' ? 4 : 5;
-  const next = calculateNextReview(progress, quality);
-
-  return {
-    state: 'review',
-    stepIndex: 0,
-    nextReviewAt: addDays(now, next.intervalDays),
-    intervalDays: next.intervalDays,
-    repetitions: next.repetitions,
-    easinessFactor: next.easinessFactor,
-  };
+  return Math.floor(diffMs / (24 * 60 * 60 * 1000));
 }
 
 function formatDelay(from, to) {
@@ -475,17 +384,18 @@ function buildAnswerDelays(card, settings) {
     repetitions: card.repetitions ?? 0,
     interval_days: card.interval_days ?? 0,
     easiness_factor: card.easiness_factor ?? 2.5,
+    next_review_at: card.next_review_at ?? null,
   };
-  const compute = card.state === 'review' ? computeReviewTransition : computeLearningTransition;
+  const overdueDays = getOverdueDays(progress, now);
   const transitions = {
-    again: compute(progress, 'again', settings, now),
-    hard: compute(progress, 'hard', settings, now),
-    good: compute(progress, 'good', settings, now),
-    easy: compute(progress, 'easy', settings, now),
+    again: calculateNextReview(progress, 'again', settings, overdueDays),
+    hard: calculateNextReview(progress, 'hard', settings, overdueDays),
+    good: calculateNextReview(progress, 'good', settings, overdueDays),
+    easy: calculateNextReview(progress, 'easy', settings, overdueDays),
   };
 
   return Object.fromEntries(
-    Object.entries(transitions).map(([rating, transition]) => [rating, formatDelay(now, transition.nextReviewAt)]),
+    Object.entries(transitions).map(([rating, transition]) => [rating, formatDelay(now, transition.next_review_at)]),
   );
 }
 
@@ -643,9 +553,8 @@ router.post(
       }
 
       const now = new Date();
-      const transition = progress.state === 'review'
-        ? computeReviewTransition(progress, req.body.rating, settings, now)
-        : computeLearningTransition(progress, req.body.rating, settings, now);
+      const overdueDays = getOverdueDays(progress, now);
+      const transition = calculateNextReview(progress, req.body.rating, settings, overdueDays);
 
       const updated = await client.query(
         `UPDATE user_word_progress
@@ -662,12 +571,12 @@ router.post(
          RETURNING *`,
         [
           transition.state,
-          transition.stepIndex,
-          transition.nextReviewAt,
-          toReviewDate(transition.nextReviewAt),
-          transition.intervalDays,
+          transition.step_index,
+          transition.next_review_at,
+          transition.next_review_date,
+          transition.interval_days,
           transition.repetitions,
-          transition.easinessFactor,
+          transition.easiness_factor,
           progress.id,
         ],
       );
