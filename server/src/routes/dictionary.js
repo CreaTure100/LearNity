@@ -192,8 +192,8 @@ router.get('/repetition/today', authRequired, [query('source').optional().isIn([
               COALESCE(cw.word, pw.word) AS word,
               COALESCE(cw.translation, pw.translation) AS translation,
               COALESCE(cw.transcription, pw.transcription) AS transcription,
-              COALESCE(cw.example, pw.example) AS example,
-              COALESCE(cw.definition, pw.definition) AS definition
+              COALESCE(pw.example, cw.example_en) AS example,
+              COALESCE(pw.definition, cw.definition_ru, cw.definition_en) AS definition
        FROM user_word_progress p
        LEFT JOIN common_words cw ON cw.id = p.common_word_id
        LEFT JOIN personal_words pw ON pw.id = p.personal_word_id

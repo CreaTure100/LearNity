@@ -224,6 +224,8 @@ select:focus {
 .study-card-wrap {
   display: grid;
   gap: 14px;
+  width: min(720px, 100%);
+  margin: 0 auto;
 }
 
 .study-card {

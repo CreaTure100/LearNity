@@ -112,8 +112,10 @@ async function getDueCount(client, userId, deck, states) {
   return result.rows[0].count;
 }
 
-async function getDueProgressCard(client, userId, deck, stateClause) {
+async function getDueProgressCard(client, userId, deck, stateClause, excludeProgressId = null) {
   if (deck === 'common') {
+    const params = excludeProgressId ? [userId, excludeProgressId] : [userId];
+    const excludeClause = excludeProgressId ? 'AND p.id <> $2' : '';
     const result = await client.query(
       `SELECT p.id AS progress_id,
               p.state,
@@ -126,20 +128,24 @@ async function getDueProgressCard(client, userId, deck, stateClause) {
               cw.word,
               cw.translation,
               cw.transcription,
-              cw.example,
-              cw.definition
+              cw.example_en,
+              cw.definition_en,
+              cw.definition_ru
        FROM user_word_progress p
        JOIN common_words cw ON cw.id = p.common_word_id
        WHERE p.user_id=$1
          AND p.source_type='common'
+         ${excludeClause}
          AND ${stateClause}
        ORDER BY p.next_review_at ASC, p.created_at ASC
        LIMIT 1`,
-      [userId],
+      params,
     );
     return result.rows[0] || null;
   }
 
+  const params = excludeProgressId ? [userId, excludeProgressId] : [userId];
+  const excludeClause = excludeProgressId ? 'AND p.id <> $2' : '';
   const result = await client.query(
     `SELECT p.id AS progress_id,
             p.state,
@@ -159,10 +165,11 @@ async function getDueProgressCard(client, userId, deck, stateClause) {
      WHERE p.user_id=$1
        AND p.source_type='personal'
        AND pw.user_id=$1
+       ${excludeClause}
        AND ${stateClause}
      ORDER BY p.next_review_at ASC, p.created_at ASC
      LIMIT 1`,
-    [userId],
+    params,
   );
   return result.rows[0] || null;
 }
@@ -174,8 +181,9 @@ async function getNewWordCard(client, userId, deck) {
               cw.word,
               cw.translation,
               cw.transcription,
-              cw.example,
-              cw.definition
+              cw.example_en,
+              cw.definition_en,
+              cw.definition_ru
        FROM common_words cw
        LEFT JOIN user_word_progress p
          ON p.user_id=$1 AND p.source_type='common' AND p.common_word_id=cw.id
@@ -205,8 +213,14 @@ async function getNewWordCard(client, userId, deck) {
   return result.rows[0] || null;
 }
 
-async function selectNextCard(client, userId, deck, settings) {
-  const dueReview = await getDueProgressCard(client, userId, deck, "p.state='review' AND p.next_review_at <= NOW()");
+async function selectNextCard(client, userId, deck, settings, excludeProgressId = null) {
+  const dueReview = await getDueProgressCard(
+    client,
+    userId,
+    deck,
+    "p.state='review' AND p.next_review_at <= NOW()",
+    excludeProgressId,
+  );
   if (dueReview) {
     return dueReview;
   }
@@ -216,6 +230,7 @@ async function selectNextCard(client, userId, deck, settings) {
     userId,
     deck,
     "p.state IN ('learning', 'relearning') AND p.next_review_at <= NOW()",
+    excludeProgressId,
   );
   if (dueLearning) {
     return dueLearning;
@@ -223,30 +238,64 @@ async function selectNextCard(client, userId, deck, settings) {
 
   const introducedToday = await countIntroducedToday(client, userId, deck);
   if (introducedToday >= settings.new_per_day) {
+    const dueLaterToday = await getDueProgressCard(
+      client,
+      userId,
+      deck,
+      "p.state IN ('learning', 'relearning', 'review') AND p.next_review_at::date = CURRENT_DATE AND p.next_review_at > NOW()",
+      excludeProgressId,
+    );
+    if (dueLaterToday) {
+      return dueLaterToday;
+    }
     return null;
   }
 
   const newCard = await getNewWordCard(client, userId, deck);
-  if (!newCard) {
-    return null;
+  if (newCard) {
+    return {
+      ...newCard,
+      progress_id: null,
+      state: 'new',
+      step_index: 0,
+      next_review_at: null,
+      interval_days: 0,
+      repetitions: 0,
+      easiness_factor: 2.5,
+    };
   }
 
-  return {
-    ...newCard,
-    progress_id: null,
-    state: 'new',
-    step_index: 0,
-    next_review_at: null,
-    interval_days: 0,
-    repetitions: 0,
-    easiness_factor: 2.5,
-  };
+  const dueLaterToday = await getDueProgressCard(
+    client,
+    userId,
+    deck,
+    "p.state IN ('learning', 'relearning', 'review') AND p.next_review_at::date = CURRENT_DATE AND p.next_review_at > NOW()",
+    excludeProgressId,
+  );
+  if (dueLaterToday) {
+    return dueLaterToday;
+  }
+
+  return null;
+}
+
+async function getNextDueAt(client, userId, deck) {
+  const result = await client.query(
+    `SELECT MIN(p.next_review_at) AS next_due_at
+     FROM user_word_progress p
+     WHERE p.user_id=$1
+       AND p.source_type=$2::word_source_type
+       AND p.state IN ('learning', 'relearning', 'review')
+       AND p.next_review_at > NOW()`,
+    [userId, deck],
+  );
+  return result.rows[0]?.next_due_at || null;
 }
 
 async function getWord(client, userId, deck, wordId) {
   if (deck === 'common') {
     const word = await client.query(
-      `SELECT id, word, translation, transcription, example, definition
+      `SELECT id, word, translation, transcription, example_en, definition_en, definition_ru
        FROM common_words
        WHERE id=$1`,
       [wordId],
@@ -390,6 +439,67 @@ function computeReviewTransition(progress, rating, settings, now) {
   };
 }
 
+function formatDelay(from, to) {
+  if (!from || !to) {
+    return null;
+  }
+  const diffMs = Math.max(0, to.getTime() - from.getTime());
+  const dayMs = 24 * 60 * 60 * 1000;
+  if (diffMs >= dayMs) {
+    const days = Math.max(1, Math.round(diffMs / dayMs));
+    return { unit: 'day', value: days, label: `${days} д` };
+  }
+  const minutes = Math.max(1, Math.round(diffMs / (60 * 1000)));
+  return { unit: 'minute', value: minutes, label: `${minutes} мин` };
+}
+
+function normalizeStudyCard(card) {
+  if (!card) {
+    return null;
+  }
+  return {
+    ...card,
+    definition: card.definition ?? card.definition_ru ?? card.definition_en ?? null,
+    example: card.example ?? card.example_en ?? null,
+  };
+}
+
+function buildAnswerDelays(card, settings) {
+  if (!card || !settings) {
+    return null;
+  }
+  const now = new Date();
+  const progress = {
+    state: card.state || 'new',
+    step_index: card.step_index ?? 0,
+    repetitions: card.repetitions ?? 0,
+    interval_days: card.interval_days ?? 0,
+    easiness_factor: card.easiness_factor ?? 2.5,
+  };
+  const compute = card.state === 'review' ? computeReviewTransition : computeLearningTransition;
+  const transitions = {
+    again: compute(progress, 'again', settings, now),
+    hard: compute(progress, 'hard', settings, now),
+    good: compute(progress, 'good', settings, now),
+    easy: compute(progress, 'easy', settings, now),
+  };
+
+  return Object.fromEntries(
+    Object.entries(transitions).map(([rating, transition]) => [rating, formatDelay(now, transition.nextReviewAt)]),
+  );
+}
+
+function decorateStudyCard(card, settings) {
+  const normalized = normalizeStudyCard(card);
+  if (!normalized) {
+    return null;
+  }
+  return {
+    ...normalized,
+    answer_delays: buildAnswerDelays(normalized, settings),
+  };
+}
+
 router.get('/decks/summary', authRequired, async (req, res, next) => {
   const client = await db.getClient();
   try {
@@ -398,12 +508,10 @@ router.get('/decks/summary', authRequired, async (req, res, next) => {
     const result = [];
     for (const deck of DECKS) {
       const settings = await getDeckSettings(client, req.user.id, deck);
-      const [learning, review, availableNew, introducedToday] = await Promise.all([
-        getDueCount(client, req.user.id, deck, ['learning', 'relearning']),
-        getDueCount(client, req.user.id, deck, ['review']),
-        countNewAvailable(client, req.user.id, deck),
-        countIntroducedToday(client, req.user.id, deck),
-      ]);
+      const learning = await getDueCount(client, req.user.id, deck, ['learning', 'relearning']);
+      const review = await getDueCount(client, req.user.id, deck, ['review']);
+      const availableNew = await countNewAvailable(client, req.user.id, deck);
+      const introducedToday = await countIntroducedToday(client, req.user.id, deck);
       const newRemaining = Math.max(settings.new_per_day - introducedToday, 0);
 
       result.push({
@@ -498,7 +606,11 @@ router.post('/decks/:deck/study/next', authRequired, [param('deck').isIn(DECKS)]
   try {
     const settings = await getDeckSettings(client, req.user.id, req.params.deck);
     const card = await selectNextCard(client, req.user.id, req.params.deck, settings);
-    return res.json({ card });
+    if (!card) {
+      const nextDueAt = await getNextDueAt(client, req.user.id, req.params.deck);
+      return res.json({ card: null, next_due_at: nextDueAt });
+    }
+    return res.json({ card: decorateStudyCard(card, settings), next_due_at: null });
   } catch (error) {
     return next(error);
   } finally {
@@ -560,10 +672,14 @@ router.post(
         ],
       );
 
-      const nextCard = await selectNextCard(client, req.user.id, deck, settings);
+      const nextCard = await selectNextCard(client, req.user.id, deck, settings, progress.id);
 
       await client.query('COMMIT');
-      return res.json({ progress: updated.rows[0], card: nextCard });
+      if (!nextCard) {
+        const nextDueAt = await getNextDueAt(client, req.user.id, deck);
+        return res.json({ progress: updated.rows[0], card: null, next_due_at: nextDueAt });
+      }
+      return res.json({ progress: updated.rows[0], card: decorateStudyCard(nextCard, settings), next_due_at: null });
     } catch (error) {
       await client.query('ROLLBACK');
       return next(error);

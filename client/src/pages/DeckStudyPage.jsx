@@ -12,15 +12,22 @@ export function DeckStudyPage() {
   const { deck } = useParams();
   const { token } = useAuth();
   const [card, setCard] = useState(null);
+  const [nextDueAt, setNextDueAt] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [answering, setAnswering] = useState(false);
+
+  const actionLabel = (title, key) => {
+    const delay = card?.answer_delays?.[key]?.label;
+    return delay ? `${title} (${delay})` : title;
+  };
 
   const loadNext = async () => {
     setLoading(true);
     try {
       const data = await http(`/decks/${deck}/study/next`, { method: 'POST', token });
       setCard(data.card);
+      setNextDueAt(data.next_due_at || null);
       setError('');
     } catch (err) {
       setError(err.message);
@@ -49,12 +56,48 @@ export function DeckStudyPage() {
         },
       });
       setCard(data.card);
+      setNextDueAt(data.next_due_at || null);
       setError('');
     } catch (err) {
       setError(err.message);
     } finally {
       setAnswering(false);
     }
+  };
+
+  useEffect(() => {
+    if (card || !nextDueAt) {
+      return undefined;
+    }
+    const nextTime = new Date(nextDueAt);
+    const diffMs = nextTime.getTime() - Date.now();
+    if (Number.isNaN(nextTime.getTime()) || diffMs <= 0) {
+      return undefined;
+    }
+    if (diffMs > 24 * 60 * 60 * 1000) {
+      return undefined;
+    }
+    const timeoutId = setTimeout(() => {
+      loadNext();
+    }, diffMs + 250);
+    return () => clearTimeout(timeoutId);
+  }, [card, nextDueAt]);
+
+  const formatNextDue = () => {
+    if (!nextDueAt) {
+      return null;
+    }
+    const diffMs = new Date(nextDueAt).getTime() - Date.now();
+    if (Number.isNaN(diffMs) || diffMs <= 0) {
+      return null;
+    }
+    const dayMs = 24 * 60 * 60 * 1000;
+    if (diffMs >= dayMs) {
+      const days = Math.max(1, Math.round(diffMs / dayMs));
+      return `${days} д`;
+    }
+    const minutes = Math.max(1, Math.round(diffMs / (60 * 1000)));
+    return `${minutes} мин`;
   };
 
   return (
@@ -73,6 +116,7 @@ export function DeckStudyPage() {
       ) : !card ? (
         <section className="card">
           <p>На сейчас карточек для изучения нет 🎉</p>
+          {nextDueAt && <p className="muted">Следующая карточка через {formatNextDue()}</p>}
           <button onClick={loadNext}>Проверить снова</button>
         </section>
       ) : (
@@ -87,10 +131,18 @@ export function DeckStudyPage() {
           </article>
 
           <div className="study-actions">
-            <button className="danger" onClick={() => onAnswer('again')} disabled={answering}>Снова</button>
-            <button className="secondary" onClick={() => onAnswer('hard')} disabled={answering}>Трудно</button>
-            <button onClick={() => onAnswer('good')} disabled={answering}>Хорошо</button>
-            <button className="study-easy" onClick={() => onAnswer('easy')} disabled={answering}>Легко</button>
+            <button className="danger" onClick={() => onAnswer('again')} disabled={answering}>
+              {actionLabel('Снова', 'again')}
+            </button>
+            <button className="secondary" onClick={() => onAnswer('hard')} disabled={answering}>
+              {actionLabel('Трудно', 'hard')}
+            </button>
+            <button onClick={() => onAnswer('good')} disabled={answering}>
+              {actionLabel('Хорошо', 'good')}
+            </button>
+            <button className="study-easy" onClick={() => onAnswer('easy')} disabled={answering}>
+              {actionLabel('Легко', 'easy')}
+            </button>
           </div>
         </section>
       )}
