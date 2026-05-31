@@ -122,12 +122,36 @@ export function DeckStudyPage() {
       ) : (
         <section className="study-card-wrap">
           <article className="study-card">
-            <p className="study-state">Состояние: {card.state}</p>
-            <h3>{card.word}</h3>
-            {card.transcription && <p className="study-transcription">{card.transcription}</p>}
-            {card.translation && <p className="study-translation">{card.translation}</p>}
-            {card.definition && <p className="study-definition">{card.definition}</p>}
-            {card.example && <p className="study-example">{card.example}</p>}
+            <header className="study-card__header">
+              <span className={`study-state-badge study-state-badge--${card.state}`}>{card.state}</span>
+              <div className="study-word-block">
+                <h3 className="study-word">{card.word}</h3>
+                {card.transcription && <p className="study-transcription">[{card.transcription}]</p>}
+              </div>
+            </header>
+
+            {card.translation && (
+              <section className="study-translation-block">
+                <p className="study-translation">{card.translation}</p>
+              </section>
+            )}
+
+            {(card.definition || card.example) && (
+              <section className="study-details">
+                {card.definition && (
+                  <p className="study-definition">
+                    <span className="study-definition__icon" aria-hidden="true">≡</span>
+                    {card.definition}
+                  </p>
+                )}
+                {card.example && (
+                  <div className="study-example">
+                    <span className="study-example__label">Пример</span>
+                    <p className="study-example__text">{card.example}</p>
+                  </div>
+                )}
+              </section>
+            )}
           </article>
 
           <div className="study-actions">
