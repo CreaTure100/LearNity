@@ -1315,16 +1315,18 @@ select:focus {
   line-height: 1.6;
 }
 
-.assignment-dnd__slot {
+ .assignment-dnd__slot {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 10px 24px;
   border: 2px dashed #d1d5db;
-  border-radius: 10px;
-  min-width: 64px;
+  border-radius: 12px;
+  min-width: 90px;
+  min-height: 38px;
   background: #f9fafb;
-  margin: 0 4px;
+  margin: 0 6px 6px 6px;
+  transition: background 0.2s, border-color 0.2s;
 }
 
 .assignment-dnd__slot--filled {

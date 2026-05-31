@@ -40,6 +40,7 @@ export function LessonPage() {
   const [error, setError] = useState('');
   const [progressReady, setProgressReady] = useState(false);
 
+
   const [assignmentForm, setAssignmentForm] = useState({
     type: 'single_choice',
     prompt: '',
@@ -48,8 +49,22 @@ export function LessonPage() {
     score: 1,
   });
 
-  const parseSlotKeys = (prompt) => {
-    if (!prompt) return [];
+  const clearDragAll = (assignmentId) => {
+    setDragAnswers((prev) => ({ ...prev, [assignmentId]: { slots: {} } }));
+    setAnswers((prev) => {
+      const next = { ...prev };
+      delete next[assignmentId];
+      return next;
+    });
+  };
+
+  const clearSingleChoice = (assignmentId) => {
+    setAnswers((prev) => {
+      const next = { ...prev };
+      delete next[assignmentId];
+      return next;
+    });
+  };
     const keys = [];
     const re = /{{\s*(\d+)\s*}}/g;
     let match = re.exec(prompt);
