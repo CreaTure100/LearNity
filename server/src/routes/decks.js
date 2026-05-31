@@ -91,7 +91,7 @@ async function getDueCount(client, userId, deck, states) {
      WHERE p.user_id=$1
        AND p.source_type=$2::word_source_type
        AND p.state = ANY($3::card_state[])
-       AND p.next_review_at <= NOW()`,
+       AND p.next_review_at::date <= CURRENT_DATE`,
     [userId, deck, states],
   );
   return result.rows[0].count;
@@ -222,14 +222,17 @@ async function selectNextCard(client, userId, deck, settings, excludeProgressId 
   }
 
   const introducedToday = await countIntroducedToday(client, userId, deck);
-  if (introducedToday >= settings.new_per_day) {
-    const dueLaterToday = await getDueProgressCard(
-      client,
-      userId,
-      deck,
-      "p.state IN ('learning', 'relearning', 'review') AND p.next_review_at::date = CURRENT_DATE AND p.next_review_at > NOW()",
-      excludeProgressId,
-    );
+  const availableNew = await countNewAvailable(client, userId, deck);
+  const newRemaining = Math.max((settings.new_per_day || 0) - introducedToday, 0);
+  const dueLaterToday = await getDueProgressCard(
+    client,
+    userId,
+    deck,
+    "p.state IN ('learning', 'relearning', 'review') AND p.next_review_at::date = CURRENT_DATE AND p.next_review_at > NOW()",
+    excludeProgressId,
+  );
+
+  if (newRemaining <= 0 || availableNew === 0) {
     if (dueLaterToday) {
       return dueLaterToday;
     }
@@ -250,13 +253,6 @@ async function selectNextCard(client, userId, deck, settings, excludeProgressId 
     };
   }
 
-  const dueLaterToday = await getDueProgressCard(
-    client,
-    userId,
-    deck,
-    "p.state IN ('learning', 'relearning', 'review') AND p.next_review_at::date = CURRENT_DATE AND p.next_review_at > NOW()",
-    excludeProgressId,
-  );
   if (dueLaterToday) {
     return dueLaterToday;
   }

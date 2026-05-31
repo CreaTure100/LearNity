@@ -155,6 +155,73 @@ router.delete('/personal-words/my/:id', authRequired, [param('id').isUUID()], va
   }
 });
 
+router.patch(
+  '/personal-words/my/:id',
+  authRequired,
+  [
+    param('id').isUUID(),
+    body('word').optional().isString().notEmpty(),
+    body('translation').optional().isString(),
+    body('transcription').optional().isString(),
+    body('example').optional().isString(),
+    body('definition').optional().isString(),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { word, translation, transcription, example, definition } = req.body;
+      const updates = [];
+      const values = [];
+      let idx = 1;
+
+      if (word !== undefined) {
+        updates.push(`word=$${idx++}`);
+        values.push(word);
+      }
+      if (translation !== undefined) {
+        updates.push(`translation=$${idx++}`);
+        values.push(translation || null);
+      }
+      if (transcription !== undefined) {
+        updates.push(`transcription=$${idx++}`);
+        values.push(transcription || null);
+      }
+      if (example !== undefined) {
+        updates.push(`example=$${idx++}`);
+        values.push(example || null);
+      }
+      if (definition !== undefined) {
+        updates.push(`definition=$${idx++}`);
+        values.push(definition || null);
+      }
+
+      if (updates.length === 0) {
+        return res.status(400).json({ message: 'Нет полей для обновления' });
+      }
+
+      values.push(req.params.id, req.user.id);
+
+      const result = await db.query(
+        `UPDATE personal_words
+         SET ${updates.join(', ')}, updated_at=NOW()
+         WHERE id=$${idx++} AND user_id=$${idx}
+         RETURNING *`,
+        values,
+      );
+
+      if (!result.rowCount) {
+        return res.status(404).json({ message: 'Слово не найдено в личной колоде' });
+      }
+      return res.json(result.rows[0]);
+    } catch (error) {
+      if (error.code === '23505') {
+        return res.status(409).json({ message: 'Это слово уже есть в вашей личной колоде' });
+      }
+      return next(error);
+    }
+  },
+);
+
 router.post('/common-words/:id/add-to-my', authRequired, [param('id').isUUID()], validate, async (req, res, next) => {
   try {
     const common = await db.query('SELECT * FROM common_words WHERE id=$1', [req.params.id]);

@@ -32,7 +32,14 @@ function App() {
             <Route path="courses/:id" element={<CourseDetailPage />} />
             <Route path="courses/:id/lessons/:lessonId" element={<LessonPage />} />
             <Route path="dictionary" element={<DictionaryPage />} />
-            <Route path="dictionary/decks/:deck/study" element={<DeckStudyPage />} />
+            <Route
+              path="dictionary/decks/:deck/study"
+              element={
+                <ProtectedRoute roles={['student']}>
+                  <DeckStudyPage />
+                </ProtectedRoute>
+              }
+            />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

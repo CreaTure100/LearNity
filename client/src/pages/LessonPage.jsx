@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { http } from '../api/http';
 import { useAuth } from '../context/AuthContext';
@@ -19,6 +19,41 @@ function toYouTubeEmbedUrl(url) {
     const u = new URL(url);
     const v = u.searchParams.get('v');
     if (v) return `https://www.youtube.com/embed/${v}`;
+  } catch {
+    // ignore
+  }
+
+  return null;
+}
+
+function isMp4Url(url) {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.pathname.toLowerCase().endsWith('.mp4');
+  } catch {
+    return url.toLowerCase().includes('.mp4');
+  }
+}
+
+function toDrivePreviewUrl(url) {
+  if (!url) return null;
+
+  try {
+    const parsed = new URL(url);
+    if (!parsed.hostname.includes('drive.google.com')) {
+      return null;
+    }
+
+    const pathMatch = parsed.pathname.match(/\/file\/d\/([^/]+)/);
+    if (pathMatch) {
+      return `https://drive.google.com/file/d/${pathMatch[1]}/preview`;
+    }
+
+    const id = parsed.searchParams.get('id');
+    if (id) {
+      return `https://drive.google.com/file/d/${id}/preview`;
+    }
   } catch {
     // ignore
   }
@@ -48,6 +83,9 @@ export function LessonPage() {
     correct_option_id: '0',
     score: 1,
   });
+  const [dragSourceText, setDragSourceText] = useState('');
+  const [dragExtras, setDragExtras] = useState('');
+  const [dragSelectedTokens, setDragSelectedTokens] = useState([]);
 
   const clearDragAll = (assignmentId) => {
     setDragAnswers((prev) => ({ ...prev, [assignmentId]: { slots: {} } }));
@@ -65,6 +103,8 @@ export function LessonPage() {
       return next;
     });
   };
+
+  const parseSlotKeys = (prompt) => {
     const keys = [];
     const re = /{{\s*(\d+)\s*}}/g;
     let match = re.exec(prompt);
@@ -112,6 +152,22 @@ export function LessonPage() {
     const keys = parseSlotKeys(prompt);
     const unique = [...new Set(keys)];
     return unique.sort((a, b) => a - b);
+  };
+
+  const parseCorrectOptionIds = (assignment) => {
+    if (!assignment) return [];
+    if (assignment.type === 'drag_and_drop') {
+      try {
+        const parsed = JSON.parse(assignment.correct_option_id || '[]');
+        return Array.isArray(parsed) ? parsed.map((id) => String(id)) : [];
+      } catch {
+        return [];
+      }
+    }
+    if (assignment.correct_option_id === undefined || assignment.correct_option_id === null) {
+      return [];
+    }
+    return [String(assignment.correct_option_id)];
   };
 
   const restoreProgress = (assignmentRows) => {
@@ -193,6 +249,82 @@ export function LessonPage() {
     localStorage.setItem(progressKey, JSON.stringify({ answers, dragAnswers }));
   }, [answers, dragAnswers, progressReady, progressKey]);
 
+  const dragTokens = useMemo(() => {
+    if (!dragSourceText) return [];
+    const tokens = [];
+    const re = /([A-Za-zА-Яа-яЁё0-9]+|\s+|[^\sA-Za-zА-Яа-яЁё0-9]+)/g;
+    let match = re.exec(dragSourceText);
+    while (match) {
+      const value = match[0];
+      let type = 'punct';
+      if (/^\s+$/.test(value)) type = 'space';
+      else if (/^[A-Za-zА-Яа-яЁё0-9]+$/.test(value)) type = 'word';
+      tokens.push({ value, type });
+      match = re.exec(dragSourceText);
+    }
+    return tokens;
+  }, [dragSourceText]);
+
+  useEffect(() => {
+    setDragSelectedTokens([]);
+  }, [dragSourceText]);
+
+  const toggleDragToken = (index) => {
+    setDragSelectedTokens((prev) => {
+      if (prev.includes(index)) {
+        return prev.filter((id) => id !== index);
+      }
+      return [...prev, index];
+    });
+  };
+
+  const selectAllDragTokens = () => {
+    const indices = dragTokens
+      .map((token, idx) => (token.type === 'word' ? idx : null))
+      .filter((idx) => idx !== null);
+    setDragSelectedTokens(indices);
+  };
+
+  const clearDragTokens = () => {
+    setDragSelectedTokens([]);
+  };
+
+  const buildDragData = () => {
+    const selectedSet = new Set(dragSelectedTokens);
+    const selectedWords = [];
+    let slotIndex = 0;
+    let prompt = '';
+
+    dragTokens.forEach((token, idx) => {
+      if (token.type === 'word' && selectedSet.has(idx)) {
+        slotIndex += 1;
+        selectedWords.push(token.value);
+        prompt += `{{${slotIndex}}}`;
+      } else {
+        prompt += token.value;
+      }
+    });
+
+    const extraOptions = dragExtras
+      .split('|')
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .filter((item) => !selectedWords.includes(item));
+
+    const optionsText = [...selectedWords, ...extraOptions];
+    const options = optionsText.map((text, index) => ({ id: String(index), text }));
+    const correctIds = selectedWords.map((_, idx) => String(idx));
+
+    return {
+      prompt,
+      options,
+      correctIds,
+      selectedWords,
+    };
+  };
+
+  const dragData = useMemo(() => buildDragData(), [dragTokens, dragExtras, dragSelectedTokens]);
+
   const createAssignment = async (e) => {
     e.preventDefault();
     const options = assignmentForm.options
@@ -202,27 +334,21 @@ export function LessonPage() {
 
     const type = assignmentForm.type || 'single_choice';
     if (type === 'drag_and_drop') {
-      const slotKeys = parseSlotKeys(assignmentForm.prompt);
-      const uniqueKeys = [...new Set(slotKeys)];
-      const maxKey = uniqueKeys.length ? Math.max(...uniqueKeys) : 0;
-      if (!uniqueKeys.length) {
-        alert('В prompt должны быть слоты вида {{1}}');
+      if (!dragSourceText.trim()) {
+        alert('Введите текст для пропусков');
         return;
       }
-      if (uniqueKeys.length > 40) {
+      const { prompt, options: dragOptions, correctIds, selectedWords } = dragData;
+      if (!selectedWords.length) {
+        alert('Выберите слова, которые будут пропусками');
+        return;
+      }
+      if (selectedWords.length > 40) {
         alert('Максимум 40 пропусков');
         return;
       }
-      if (uniqueKeys.length !== slotKeys.length || maxKey !== uniqueKeys.length || !uniqueKeys.every((k) => k >= 1)) {
-        alert('Слоты должны быть пронумерованы подряд: {{1}}, {{2}}, ...');
-        return;
-      }
-      const correctIds = assignmentForm.correct_option_id
-        .split('|')
-        .map((id) => id.trim())
-        .filter(Boolean);
-      if (correctIds.length !== uniqueKeys.length) {
-        alert('Ответы должны быть для каждого слота по порядку');
+      if (dragOptions.length < 2) {
+        alert('Нужно минимум 2 варианта ответа');
         return;
       }
       await http(`/lessons/${lessonId}/assignments`, {
@@ -230,13 +356,16 @@ export function LessonPage() {
         token,
         body: {
           type,
-          prompt: assignmentForm.prompt,
-          options,
+          prompt,
+          options: dragOptions,
           correct_option_ids: correctIds,
           score: Number(assignmentForm.score),
         },
       });
       setAssignmentForm({ type, prompt: '', options: 'A|B', correct_option_id: '', score: 1 });
+      setDragSourceText('');
+      setDragExtras('');
+      setDragSelectedTokens([]);
       await load();
       return;
     }
@@ -312,10 +441,6 @@ export function LessonPage() {
     });
   };
 
-  const clearDragAll = (assignmentId) => {
-    setDragAnswers((prev) => ({ ...prev, [assignmentId]: { slots: {} } }));
-  };
-
   return (
     <div className="lesson-page">
       {/* Breadcrumb */}
@@ -337,7 +462,47 @@ export function LessonPage() {
         {lesson?.description && <p className="lesson-page__desc">{lesson.description}</p>}
         {lesson?.video_url && (
           (() => {
+            const drivePreviewUrl = toDrivePreviewUrl(lesson.video_url);
+            const isMp4 = isMp4Url(lesson.video_url);
             const embedUrl = toYouTubeEmbedUrl(lesson.video_url);
+            if (drivePreviewUrl) {
+              return (
+                <div className="lesson-page__video card">
+                  <div className="video-embed">
+                    <iframe
+                      src={drivePreviewUrl}
+                      title="Lesson video"
+                      frameBorder="0"
+                      allow="autoplay"
+                      allowFullScreen
+                    />
+                  </div>
+
+                  <div className="video-fallback">
+                    <a href={lesson.video_url} target="_blank" rel="noreferrer" className="lesson-page__video-link">
+                      Открыть видео
+                    </a>
+                  </div>
+                </div>
+              );
+            }
+
+            if (isMp4) {
+              return (
+                <div className="lesson-page__video card">
+                  <div className="video-embed">
+                    <video controls preload="metadata" src={lesson.video_url} />
+                  </div>
+
+                  <div className="video-fallback">
+                    <a href={lesson.video_url} target="_blank" rel="noreferrer" className="lesson-page__video-link">
+                      Открыть видео
+                    </a>
+                  </div>
+                </div>
+              );
+            }
+
             if (!embedUrl) {
               return (
                 <a href={lesson.video_url} target="_blank" rel="noreferrer" className="lesson-page__video-link">
@@ -395,48 +560,142 @@ export function LessonPage() {
               <option value="drag_and_drop">Drag and drop</option>
             </select>
           </div>
-          <div className="form-group">
-            <textarea
-              placeholder="Вопрос"
-              value={assignmentForm.prompt}
-              onChange={(e) => setAssignmentForm((s) => ({ ...s, prompt: e.target.value }))}
-              rows={4}
-              required
-            />
-          </div>
-          <div className="form-row">
-            <div className="form-group">
-              <input
-                placeholder={assignmentForm.type === 'drag_and_drop' ? 'Варианты для перетаскивания через |' : 'Варианты через |'}
-                value={assignmentForm.options}
-                onChange={(e) => setAssignmentForm((s) => ({ ...s, options: e.target.value }))}
-                required
-              />
+          {assignmentForm.type === 'drag_and_drop' ? (
+            <div className="drag-builder">
+              <div className="drag-builder__editor">
+                <label className="drag-builder__label">Текст для пропусков</label>
+                <textarea
+                  className="drag-builder__textarea"
+                  placeholder="Вставьте текст, затем выделите слова для пропусков"
+                  value={dragSourceText}
+                  onChange={(e) => setDragSourceText(e.target.value)}
+                  rows={5}
+                  required
+                />
+                <div className="drag-builder__toolbar">
+                  <button type="button" className="secondary" onClick={selectAllDragTokens}>
+                    Выделить все слова
+                  </button>
+                  <button type="button" className="secondary" onClick={clearDragTokens}>
+                    Сбросить выбор
+                  </button>
+                  <span className="drag-builder__count">Пропусков: {dragData.selectedWords.length}</span>
+                </div>
+                <div className="drag-builder__tokens" aria-live="polite">
+                  {dragTokens.length === 0 && <span className="muted">Тут появится текст для выбора пропусков.</span>}
+                  {dragTokens.map((token, idx) => {
+                    if (token.type === 'word') {
+                      const isSelected = dragSelectedTokens.includes(idx);
+                      return (
+                        <button
+                          type="button"
+                          key={`token-${idx}`}
+                          className={`drag-token ${isSelected ? 'drag-token--selected' : ''}`}
+                          onClick={() => toggleDragToken(idx)}
+                        >
+                          {token.value}
+                        </button>
+                      );
+                    }
+                    return (
+                      <span key={`token-${idx}`} className="drag-token__sep">
+                        {token.value}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="drag-builder__side">
+                <div className="form-group">
+                  <label>Доп. варианты (через |)</label>
+                  <input
+                    placeholder="Например: quick | suddenly"
+                    value={dragExtras}
+                    onChange={(e) => setDragExtras(e.target.value)}
+                  />
+                </div>
+                <div className="drag-builder__preview">
+                  <div className="drag-builder__label">Превью пропусков</div>
+                  <div className="drag-builder__prompt">
+                    {(() => {
+                      const parts = parsePromptParts(dragData.prompt);
+                      return parts.map((part, idx) => {
+                        if (part.type === 'text') {
+                          return (
+                            <span key={`preview-text-${idx}`}>
+                              {renderTextWithLineBreaks(part.value, `preview-${idx}`)}
+                            </span>
+                          );
+                        }
+                        return (
+                          <span key={`preview-slot-${idx}`} className="drag-builder__slot">
+                            ____
+                          </span>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+                <div className="drag-builder__preview">
+                  <div className="drag-builder__label">Варианты для перетаскивания</div>
+                  <div className="drag-builder__options">
+                    {dragData.options.map((opt) => (
+                      <span className="drag-builder__chip" key={opt.id}>{opt.text}</span>
+                    ))}
+                    {dragData.options.length === 0 && <span className="muted">Пока нет вариантов</span>}
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>Баллы</label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="Баллы"
+                    value={assignmentForm.score}
+                    onChange={(e) => setAssignmentForm((s) => ({ ...s, score: e.target.value }))}
+                  />
+                </div>
+              </div>
             </div>
-            <div className="form-group">
-              <input
-                placeholder={assignmentForm.type === 'drag_and_drop'
-                  ? 'Ответы по слотам (ID через |)'
-                  : 'ID правильного (0, 1, …)'}
-                value={assignmentForm.correct_option_id}
-                onChange={(e) => setAssignmentForm((s) => ({ ...s, correct_option_id: e.target.value }))}
-                required
-              />
-            </div>
-            <div className="form-group">
-              <input
-                type="number"
-                min="0"
-                placeholder="Баллы"
-                value={assignmentForm.score}
-                onChange={(e) => setAssignmentForm((s) => ({ ...s, score: e.target.value }))}
-              />
-            </div>
-          </div>
-          {assignmentForm.type === 'drag_and_drop' && (
-            <div className="form-hint">
-              Используйте слоты {'{{1}}'} {'{{2}}'} в prompt. Ответы задаются по порядку слотов, через |.
-            </div>
+          ) : (
+            <>
+              <div className="form-group">
+                <textarea
+                  placeholder="Вопрос"
+                  value={assignmentForm.prompt}
+                  onChange={(e) => setAssignmentForm((s) => ({ ...s, prompt: e.target.value }))}
+                  rows={4}
+                  required
+                />
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <input
+                    placeholder="Варианты через |"
+                    value={assignmentForm.options}
+                    onChange={(e) => setAssignmentForm((s) => ({ ...s, options: e.target.value }))}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <input
+                    placeholder="ID правильного (0, 1, …)"
+                    value={assignmentForm.correct_option_id}
+                    onChange={(e) => setAssignmentForm((s) => ({ ...s, correct_option_id: e.target.value }))}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="Баллы"
+                    value={assignmentForm.score}
+                    onChange={(e) => setAssignmentForm((s) => ({ ...s, score: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </>
           )}
           <button type="submit">Создать задание</button>
         </form>
@@ -540,7 +799,6 @@ export function LessonPage() {
                         <button
                           className="secondary"
                           onClick={() => clearDragAll(a.id)}
-                          disabled={!!answer}
                         >
                           Сбросить
                         </button>
@@ -549,32 +807,88 @@ export function LessonPage() {
                   );
                 })()
               ) : (
-                <div className="assignment-card__options">
-                  {a.options.map((opt) => {
-                    const isSelected = answer?.selected === opt.id;
-                    const isCorrectOpt = answer && answer.result && !answer.result.is_correct && opt.id === a.correct_option_id;
-                    let extraClass = '';
-                    if (isSelected && answer?.result?.is_correct) extraClass = 'assignment-card__option--correct';
-                    else if (isSelected && !answer?.result?.is_correct) extraClass = 'assignment-card__option--wrong';
-                    else if (isCorrectOpt) extraClass = 'assignment-card__option--was-correct';
+                <>
+                  <div className="assignment-card__options">
+                    {a.options.map((opt) => {
+                      const isSelected = answer?.selected === opt.id;
+                      const isCorrectOpt = answer && answer.result && !answer.result.is_correct && opt.id === a.correct_option_id;
+                      let extraClass = '';
+                      if (isSelected && answer?.result?.is_correct) extraClass = 'assignment-card__option--correct';
+                      else if (isSelected && !answer?.result?.is_correct) extraClass = 'assignment-card__option--wrong';
+                      else if (isCorrectOpt) extraClass = 'assignment-card__option--was-correct';
 
-                    return (
-                      <button
-                        key={opt.id}
-                        className={`assignment-card__option ${extraClass}`}
-                        onClick={() => !answer && submitAnswer(a.id, opt.id)}
-                        disabled={!!answer}
-                      >
-                        {opt.text}
-                      </button>
-                    );
-                  })}
-                </div>
+                      return (
+                        <button
+                          key={opt.id}
+                          className={`assignment-card__option ${extraClass}`}
+                          onClick={() => !answer && submitAnswer(a.id, opt.id)}
+                          disabled={!!answer}
+                        >
+                          {opt.text}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="assignment-dnd__actions">
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => clearSingleChoice(a.id)}
+                    >
+                      Сбросить
+                    </button>
+                  </div>
+                </>
               )}
               {answer && (
                 <div className={`assignment-card__feedback ${answer.result.is_correct ? 'assignment-card__feedback--correct' : 'assignment-card__feedback--wrong'}`}>
                   {answer.result.is_correct ? `✅ Верно! +${answer.result.earned_score} баллов` : '❌ Неверно'}
                 </div>
+              )}
+              {answer && (
+                (() => {
+                  const correctIds = parseCorrectOptionIds(a);
+                  const optionMap = Object.fromEntries(a.options.map((opt) => [String(opt.id), opt]));
+
+                  if (type === 'drag_and_drop') {
+                    const slotKeys = getSlotKeys(a.prompt);
+                    const selectedIds = Array.isArray(answer.selected)
+                      ? answer.selected.map((id) => String(id))
+                      : [];
+                    return (
+                      <div className="assignment-card__answers">
+                        <div className="assignment-card__answer-title">Правильные ответы по слотам</div>
+                        {slotKeys.map((slotKey, idx) => {
+                          const correctId = correctIds[idx];
+                          const selectedId = selectedIds[idx];
+                          const isCorrectSlot = correctId && selectedId === correctId;
+                          return (
+                            <div className={`assignment-card__answer-row ${isCorrectSlot ? 'assignment-card__answer-row--ok' : 'assignment-card__answer-row--bad'}`} key={`slot-${slotKey}`}>
+                              <span className="assignment-card__answer-label">Слот {slotKey}:</span>
+                              <span>Ваш ответ: {selectedId ? optionMap[selectedId]?.text : '—'}</span>
+                              <span>Правильно: {correctId ? optionMap[correctId]?.text : '—'}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  }
+
+                  const correctId = correctIds[0];
+                  const selectedId = answer.selected ? String(answer.selected) : null;
+                  const isCorrect = selectedId && correctId && selectedId === correctId;
+                  return (
+                    <div className="assignment-card__answers">
+                      <div className="assignment-card__answer-title">Правильный ответ</div>
+                      <div className={`assignment-card__answer-row ${isCorrect ? 'assignment-card__answer-row--ok' : 'assignment-card__answer-row--bad'}`}>
+                        <span className="assignment-card__answer-label">Ваш ответ:</span>
+                        <span>{selectedId ? optionMap[selectedId]?.text : '—'}</span>
+                        <span className="assignment-card__answer-label">Правильно:</span>
+                        <span>{correctId ? optionMap[correctId]?.text : '—'}</span>
+                      </div>
+                    </div>
+                  );
+                })()
               )}
               {canManage && (
                 <button className="danger assignment-card__delete" onClick={() => deleteAssignment(a.id)}>
