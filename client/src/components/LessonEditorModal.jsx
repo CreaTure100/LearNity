@@ -79,8 +79,8 @@ export function LessonEditorModal({ lesson, onSave, onClose }) {
               {isNew && <span className="form-hint">Оставьте пустым — будет определён автоматически</span>}
             </div>
             <div className="form-group">
-              <label>Ссылка на видео</label>
-              <input value={form.video_url} onChange={set('video_url')} placeholder="https://..." />
+              <label>Ссылка на видео (YouTube или mp4)</label>
+              <input value={form.video_url} onChange={set('video_url')} placeholder="https://...mp4 или https://youtu.be/..." />
             </div>
           </div>
 

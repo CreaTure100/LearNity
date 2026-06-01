@@ -9,6 +9,7 @@ import { CoursesPage } from './pages/CoursesPage';
 import { CourseDetailPage } from './pages/CourseDetailPage';
 import { LessonPage } from './pages/LessonPage';
 import { DictionaryPage } from './pages/DictionaryPage';
+import { DeckStudyPage } from './pages/DeckStudyPage';
 
 function App() {
   return (
@@ -31,6 +32,14 @@ function App() {
             <Route path="courses/:id" element={<CourseDetailPage />} />
             <Route path="courses/:id/lessons/:lessonId" element={<LessonPage />} />
             <Route path="dictionary" element={<DictionaryPage />} />
+            <Route
+              path="dictionary/decks/:deck/study"
+              element={
+                <ProtectedRoute roles={['student']}>
+                  <DeckStudyPage />
+                </ProtectedRoute>
+              }
+            />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -129,16 +129,8 @@ router.post(
         ],
       );
 
-      const personalWord = inserted.rows[0];
-      await client.query(
-        `INSERT INTO user_word_progress(user_id, source_type, personal_word_id, next_review_date)
-         VALUES($1, 'personal', $2, CURRENT_DATE)
-         ON CONFLICT (user_id, personal_word_id) WHERE source_type='personal' DO NOTHING`,
-        [req.user.id, personalWord.id],
-      );
-
       await client.query('COMMIT');
-      return res.status(201).json(personalWord);
+      return res.status(201).json(inserted.rows[0]);
     } catch (error) {
       await client.query('ROLLBACK');
       if (error.code === '23505') {
@@ -162,6 +154,73 @@ router.delete('/personal-words/my/:id', authRequired, [param('id').isUUID()], va
     return next(error);
   }
 });
+
+router.patch(
+  '/personal-words/my/:id',
+  authRequired,
+  [
+    param('id').isUUID(),
+    body('word').optional().isString().notEmpty(),
+    body('translation').optional().isString(),
+    body('transcription').optional().isString(),
+    body('example').optional().isString(),
+    body('definition').optional().isString(),
+  ],
+  validate,
+  async (req, res, next) => {
+    try {
+      const { word, translation, transcription, example, definition } = req.body;
+      const updates = [];
+      const values = [];
+      let idx = 1;
+
+      if (word !== undefined) {
+        updates.push(`word=$${idx++}`);
+        values.push(word);
+      }
+      if (translation !== undefined) {
+        updates.push(`translation=$${idx++}`);
+        values.push(translation || null);
+      }
+      if (transcription !== undefined) {
+        updates.push(`transcription=$${idx++}`);
+        values.push(transcription || null);
+      }
+      if (example !== undefined) {
+        updates.push(`example=$${idx++}`);
+        values.push(example || null);
+      }
+      if (definition !== undefined) {
+        updates.push(`definition=$${idx++}`);
+        values.push(definition || null);
+      }
+
+      if (updates.length === 0) {
+        return res.status(400).json({ message: 'Нет полей для обновления' });
+      }
+
+      values.push(req.params.id, req.user.id);
+
+      const result = await db.query(
+        `UPDATE personal_words
+         SET ${updates.join(', ')}, updated_at=NOW()
+         WHERE id=$${idx++} AND user_id=$${idx}
+         RETURNING *`,
+        values,
+      );
+
+      if (!result.rowCount) {
+        return res.status(404).json({ message: 'Слово не найдено в личной колоде' });
+      }
+      return res.json(result.rows[0]);
+    } catch (error) {
+      if (error.code === '23505') {
+        return res.status(409).json({ message: 'Это слово уже есть в вашей личной колоде' });
+      }
+      return next(error);
+    }
+  },
+);
 
 router.post('/common-words/:id/add-to-my', authRequired, [param('id').isUUID()], validate, async (req, res, next) => {
   try {
@@ -200,8 +259,8 @@ router.get('/repetition/today', authRequired, [query('source').optional().isIn([
               COALESCE(cw.word, pw.word) AS word,
               COALESCE(cw.translation, pw.translation) AS translation,
               COALESCE(cw.transcription, pw.transcription) AS transcription,
-              COALESCE(cw.example, pw.example) AS example,
-              COALESCE(cw.definition, pw.definition) AS definition
+              COALESCE(pw.example, cw.example_en) AS example,
+              COALESCE(pw.definition, cw.definition_ru, cw.definition_en) AS definition
        FROM user_word_progress p
        LEFT JOIN common_words cw ON cw.id = p.common_word_id
        LEFT JOIN personal_words pw ON pw.id = p.personal_word_id
